@@ -21,7 +21,7 @@ while True:
         curs.execute('SELECT cron.every_minute()')
         print conn.notices
         del conn.notices[:]
-        sleep(10)
+        sleep(60)
     except Exception, e:
 #        syslog.syslog(syslog.LOG_ERR,str(e))
         print "ERROR: ", str(e)   
