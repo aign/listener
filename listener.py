@@ -109,7 +109,7 @@ while True:
                         # execute_bot(json_notify)
                         if notify.payload != '':
                             json_notify = json.loads(notify.payload)
-                            os.system("python27 execute_bot.py %1"%json_notify['id'])
+                            os.system("python27 execute_bot.py %s %s"%(json_notify['id'],json_notify['worker_initials']))
                         
                     elif notify.channel == scheduler_channel:
                         #if notification is on a bot scheduler channel
