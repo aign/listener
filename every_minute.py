@@ -7,9 +7,7 @@ import psycopg2.extensions
 #import syslog
 from time import sleep
 from subprocess import Popen
-
-db_config = {
-}
+from config import db_config
 
 
 DSN = " ".join("{0}='{1}'".format(k,v) for k,v in db_config.iteritems())
@@ -19,8 +17,11 @@ conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
 curs = conn.cursor()
 while True:
     try:
+        print('executing')
         curs.execute('SELECT cron.every_minute()')
-        sleep(60)
+        print conn.notices
+        del conn.notices[:]
+        sleep(10)
     except Exception, e:
 #        syslog.syslog(syslog.LOG_ERR,str(e))
         print "ERROR: ", str(e)   

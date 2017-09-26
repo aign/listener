@@ -30,11 +30,11 @@ import select
 import psycopg2
 import psycopg2.extensions
 import json
+from config import db_config
 #import syslog
 from subprocess import Popen
+from logging.config import listen
 
-db_config = {
-}
 db_config_local_test = {
  "host": "localhost",
  "port": "5432",
@@ -50,21 +50,10 @@ channel = "emailer"
 fetch_channel = "fetcher"
 bot_channel = "bot_manager"
 scheduler_channel="bot_scheduler"
+execute_python_channel="execute_python_script"
 
 DSN = " ".join("{0}='{1}'".format(k,v) for k,v in db_config.iteritems())
 #function that executes bot script, later will be moved to separate file 'execute_bot.py'
-def execute_bot(data):
-    sqlstr = 'Select * from task_bots.bots where name = '+'\''+data['worker_initials']+'\''
-    print(sqlstr)
-    bot_cur.execute(sqlstr)
-    rows = bot_cur.fetchall()
-    for bot_row in rows:
-        procname = bot_row[3]
-        if bot_row[2] == 1:
-            print('execute sql script')
-            bot_cur.execute("update task_manager.tasks set task_status="+"'accepted'"+' where id ='+str(data['id']))
-            bot_cur.execute('select '+procname+'('+str(data['id'])+')')
-            print(bot_cur.query)
 
 while True:
     try:
@@ -75,8 +64,9 @@ while True:
         conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         curs = conn.cursor()
         bot_cur = conn.cursor()
+        curs.execute("SELECT pg_advisory_unlock(1234567890);")
         #Attempt to obtain an advisory lock to prevent duplicate processing
-        curs.execute('SELECT pg_try_advisory_lock(123456789);')
+        curs.execute('SELECT pg_try_advisory_lock(1234567890);')
         if not curs.fetchone()[0]:
             #syslog.syslog('Automatic emailer instance already running. Exiting this instance.')
             raise SystemExit(0)
@@ -85,7 +75,8 @@ while True:
         curs.execute("LISTEN {0}".format(fetch_channel))
         curs.execute("LISTEN {0};".format(bot_channel))
         curs.execute("LISTEN {0}".format(scheduler_channel))
-
+        curs.execute("LISTEN {0}".format(execute_python_channel))
+        print( "listen to {0},{1},{2},{3},{4}".format(channel,fetch_channel,bot_channel,scheduler_channel,execute_python_channel))
         #syslog.syslog('Automatic emailer/fetcher listener started.')
 
         #Listen for notifcations from Postgres and execute the emailer script or bot script or scheduler script in reponse, 
@@ -111,14 +102,24 @@ while True:
                         os.system("python27 fetcher.py")
                     elif notify.channel == bot_channel:
                         #if notification is on a bot channel
-                        print("bot_manager Invoked")
-                        print(notify.payload.lower())
-                        json_notify = json.loads(notify.payload)
-                        execute_bot(json_notify)
+                        print ("bot Invoked")
+                        # print("bot_manager Invoked")
+                        # print(notify.payload.lower())
+                        # json_notify = json.loads(notify.payload)
+                        # execute_bot(json_notify)
+                        if notify.payload != '':
+                            json_notify = json.loads(notify.payload)
+                            os.system("python27 execute_bot.py %1"%json_notify['id'])
                         
                     elif notify.channel == scheduler_channel:
                         #if notification is on a bot scheduler channel
                         pass
+                    elif notify.channel == execute_python_channel:
+                        print ("Execute_python_script Invoked")
+                        #if notification is on a bot scheduler channel
+                        os.system("python27 execute_python_scripts.py")
+                        pass
+                    
 
     except Exception, e:
         #syslog.syslog(syslog.LOG_ERR,str(e))
@@ -129,7 +130,7 @@ while True:
     finally:
         if not connection_reseted:
             #Release advisory lock, unlisten for notifications, close the database connection
-            curs.execute("SELECT pg_advisory_unlock(123456789);")
+            curs.execute("SELECT pg_advisory_unlock(1234567890);")
             curs.execute("UNLISTEN {0};".format(channel))
             curs.execute("UNLISTEN {0}".format(fetch_channel))
             conn.close()
